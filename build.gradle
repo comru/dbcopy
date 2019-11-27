@@ -1,0 +1,107 @@
+buildscript {
+    ext.repositoryUrl = 'http://repository.haulmont.com:8587/nexus/content'
+    ext.repositoryUser = System.getenv('HAULMONT_REPOSITORY_USER')
+    ext.repositoryPassword = System.getenv('HAULMONT_REPOSITORY_PASSWORD')
+
+    repositories {
+        mavenLocal()
+        maven {
+            credentials {
+                username repositoryUser
+                password repositoryPassword
+            }
+            url "$repositoryUrl/groups/work"
+        }
+    }
+}
+
+
+apply(plugin: 'java')
+apply(plugin: 'maven')
+apply(plugin: 'idea')
+apply(plugin: 'application')
+
+mainClassName = "com.haulmont.dbcopy.DbCopy"
+applicationDistribution.from(file('readme.txt'))
+
+
+configurations {
+    deployerJars
+}
+
+dependencies {
+//    compile(group: 'commons-lang', name: 'commons-lang', version: '2.4')
+//    compile(group: 'com.google.guava', name: 'guava', version: '25.1-jre')
+    compile(group: 'org.postgresql', name: 'postgresql', version: '42.2.5')
+    compile(group: 'net.sourceforge.jtds', name: 'jtds', version: '1.2.4')
+    compile(group: 'com.microsoft.sqlserver', name: 'mssql-jdbc', version: '7.0.0.jre8')
+    compile(group: 'commons-cli', name: 'commons-cli', version: '1.2')
+
+    testCompile(group: 'junit', name: 'junit', version: '4.5')
+    deployerJars(group: 'org.apache.maven.wagon', name: 'wagon-http', version: '1.0-beta-2')
+}
+
+sourceSets {
+    main {
+        java { srcDir 'src' }
+        resources { srcDir 'src' }
+    }
+    test {
+        java { srcDir 'test' }
+        resources { srcDir 'test' }
+    }
+}
+
+sourceCompatibility = '1.8'
+
+task sourceJar(type: Jar) {
+    from sourceSets.main.java
+    classifier = 'sources'
+} 
+
+artifacts {
+    archives sourceJar
+    archives distZip
+    archives distTar
+}
+
+repositories {
+    mavenLocal()
+    maven {
+        url "http://repository.haulmont.com:8587/nexus/content/groups/work"
+        credentials {
+            def u = System.getenv('HAULMONT_REPOSITORY_USER')
+            def p = System.getenv('HAULMONT_REPOSITORY_PASSWORD')
+            username(u ? u : 'cuba'); password(p ? p : 'cuba123')
+        }
+    }
+}
+
+uploadArchives {
+    repositories.mavenDeployer {
+        name = 'httpDeployer'
+        configuration = configurations.deployerJars
+        repository(url: "$repositoryUrl/repositories/" + (false ? 'snapshots' : 'releases')) {
+            authentication(userName: repositoryUser, password: repositoryPassword)
+        }
+    }
+}
+
+idea.project.ipr {
+    withXml { provider ->
+        def node = provider.node.component.find { it.@name == 'ProjectRootManager' }
+        node.@languageLevel = 'JDK_1_8'
+        node.@'project-jdk-name' = '1.8'
+
+        node = provider.node.component.find { it.@name == 'CopyrightManager' }
+        node.@default = 'Haulmont'
+        node = node.appendNode('copyright')
+        node.appendNode('option', [name: 'notice', value: 'Copyright (c) $today.year Haulmont Technology Ltd. All Rights Reserved.\nHaulmont Technology proprietary and confidential.\nUse is subject to license terms.'])
+        node.appendNode('option', [name: 'keyword', value: 'Copyright'])
+        node.appendNode('option', [name: 'allowReplaceKeyword', value: ''])
+        node.appendNode('option', [name: 'myName', value: 'Haulmont'])
+        node.appendNode('option', [name: 'myLocal', value: 'true'])
+
+        provider.node.component.find { it.@name == 'VcsDirectoryMappings' }.mapping.@vcs = 'svn'
+    }
+}
